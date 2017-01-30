@@ -1,0 +1,6 @@
+bin/
+libexec/
+logs/
+target/
+.*
+/RUNNING_PID
