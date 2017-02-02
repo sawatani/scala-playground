@@ -19,3 +19,7 @@ addSbtPlugin("org.irundaia.sbt" % "sbt-sassify" % "1.4.6")
 
 // Eclipse
 addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "4.0.0")
+
+// Flyway
+resolvers += "Flyway" at "https://flywaydb.org/repo"
+addSbtPlugin("org.flywaydb" % "flyway-sbt" % "4.0")
