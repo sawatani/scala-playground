@@ -38,28 +38,32 @@ lazy val src_generated = "src_generated"
 
 unmanagedSourceDirectories in Compile += baseDirectory.value / src_generated
 
-lazy val database = project
-  .enablePlugins(FlywayPlugin)
+lazy val db_codegen = (project in file("database/codegen"))
   .settings(
     scalaVersion := scala_version,
     libraryDependencies ++= dbLibs ++ Seq(
-      "org.flywaydb" % "flyway-core" % "4.0",
       "com.typesafe.slick" %% "slick-codegen" % "3.1.1",
       "org.slf4j" % "slf4j-simple" % "1.7.22"
+    )
+  )
+
+lazy val database = project
+  .enablePlugins(FlywayPlugin)
+  .dependsOn(db_codegen)
+  .settings(
+    scalaVersion := scala_version,
+    libraryDependencies ++= dbLibs ++ Seq(
+      "org.flywaydb" % "flyway-core" % "4.0"
     ),
     flywayLocations := Seq("filesystem:database/migration"), 
     flywayUrl := jdbcUrl,
     flywayUser := jdbcUsername,
     flywayPassword := jdbcPassword,
-    TaskKey[Seq[File]]("codegen") <<= Def.sequential(compile in Compile, slickCodegenTask)
+    TaskKey[Unit]("codegen") <<= (dependencyClasspath in Compile, runner in Compile, streams) map { (cp, r, s) =>
+      val outputDir = Seq(src_generated, "slick").mkString("/")
+      val pkg = "sql"
+      toError(r.run("CustomCodeGen", cp.files, Array(slickDriver, jdbcDriver, jdbcUrl, outputDir, pkg, jdbcUsername, jdbcPassword), s.log))
+    }
   )
-
-lazy val slickCodegenTask = (dependencyClasspath in Compile, runner in Compile, streams) map { (cp, r, s) =>
-  val outputDir = Seq(src_generated, "slick").mkString("/")
-  val pkg = "sql"
-  toError(r.run("sql.CustomCodeGen", cp.files, Array(slickDriver, jdbcDriver, jdbcUrl, outputDir, pkg, jdbcUsername, jdbcPassword), s.log))
-  val fname = Seq(outputDir, pkg, "Tables.scala").mkString("/")
-  Seq(file(fname))
-}
 
 fork in run := true

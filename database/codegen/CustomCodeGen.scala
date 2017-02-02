@@ -1,5 +1,3 @@
-package sql
-
 import slick.driver.JdbcProfile
 import scala.concurrent.ExecutionContext.Implicits.global
 import slick.driver.MySQLDriver.api._
@@ -37,19 +35,22 @@ object CustomCodeGen {
     val pkg = args(4)
     val user = args(5)
     val password = args(6)
-    val driver: JdbcProfile = Thread.currentThread.getContextClassLoader.loadClass(slickDriver + "$").getField("MODULE$").get(null).asInstanceOf[JdbcProfile]
+
+    val driver = loadObject[JdbcProfile](slickDriver)
     val db = { Database.forURL(url, driver = jdbcDriver, user = user, password = password) }
-  
+
     // 非同期をぶった斬って処理する
     val model = Await.result(db.run(driver.createModel(None, false)(ExecutionContext.global).withPinnedSession), Duration.Inf)
-  
-    // 登録日(create_at)と更新日(update_at)はMySql側の設定で対応するのでTablesからは除外する
+
+    // 登録日(create_at)と更新日(update_at)は Postgres 側の設定で対応するので Tables からは除外する
     val ts = (for {
       t <- model.tables
       c = t.columns.filter(_.name != "create_at").filter(_.name != "update_at")
     } yield(slick.model.Table(t.name, c, t.primaryKey, t.foreignKeys, t.indices, t.options)))
     val fModel = Model(tables = ts)
-  
+
     val codeGenFuture = new CustomGenerator(fModel).writeToFile(slickDriver, outputFolder , pkg, "Tables", "Tables.scala")
   }
+
+  def loadObject[T](name: String) = Thread.currentThread.getContextClassLoader.loadClass(name + "$").getField("MODULE$").get(null).asInstanceOf[T]
 }
