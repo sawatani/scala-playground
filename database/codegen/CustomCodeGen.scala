@@ -45,6 +45,7 @@ object CustomCodeGen {
     // 登録日(create_at)と更新日(update_at)は Postgres 側の設定で対応するので Tables からは除外する
     val ts = (for {
       t <- model.tables
+      if (t.name.table != "schema_version")
       c = t.columns.filter(_.name != "create_at").filter(_.name != "update_at")
     } yield(slick.model.Table(t.name, c, t.primaryKey, t.foreignKeys, t.indices, t.options)))
     val fModel = Model(tables = ts)
