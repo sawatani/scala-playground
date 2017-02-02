@@ -4,20 +4,25 @@ version := "1.0-SNAPSHOT"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
-scalaVersion := "2.11.7"
+lazy val scala_version = "2.11.7"
 
-lazy val dblib =  "org.postgresql" % "postgresql" % "9.4.1212"
+scalaVersion := scala_version
+
+lazy val dbLibs =  Seq(
+  "joda-time" % "joda-time" % "2.7",
+  "org.joda" % "joda-convert" % "1.7",
+  "com.github.tototoshi" %% "slick-joda-mapper" % "2.2.0",
+  "org.postgresql" % "postgresql" % "9.4.1212"
+)
 
 libraryDependencies ++= Seq(
   jdbc,
-  dblib,
   cache,
   ws,
   "org.scalaz" %% "scalaz-core" % "7.2.8",
   "com.typesafe.play" %% "play-slick" % "2.0.2",
-  "com.typesafe.slick" %% "slick-codegen" % "3.1.1",
   "org.scalatestplus.play" %% "scalatestplus-play" % "1.5.1" % Test
-)
+) ++ dbLibs
 
 // Compile the project before generating Eclipse files, so that generated .scala or .class files for views and routes are present
 EclipseKeys.preTasks := Seq(compile in Compile)
@@ -29,25 +34,32 @@ lazy val jdbcUrl = config.getString("slick.dbs.default.db.url")
 lazy val jdbcUsername = config.getString("slick.dbs.default.db.username")
 lazy val jdbcPassword = config.getString("slick.dbs.default.db.password")
 
-lazy val flyway = (project in file("flyway"))
+lazy val src_generated = "src_generated"
+
+unmanagedSourceDirectories in Compile += baseDirectory.value / src_generated
+
+lazy val database = project
   .enablePlugins(FlywayPlugin)
   .settings(
-    libraryDependencies ++= Seq(dblib, "org.flywaydb" % "flyway-core" % "4.0"),
-    flywayLocations := Seq("filesystem:flyway/migration"), 
+    scalaVersion := scala_version,
+    libraryDependencies ++= dbLibs ++ Seq(
+      "org.flywaydb" % "flyway-core" % "4.0",
+      "com.typesafe.slick" %% "slick-codegen" % "3.1.1",
+      "org.slf4j" % "slf4j-simple" % "1.7.22"
+    ),
+    flywayLocations := Seq("filesystem:database/migration"), 
     flywayUrl := jdbcUrl,
     flywayUser := jdbcUsername,
-    flywayPassword := jdbcPassword
+    flywayPassword := jdbcPassword,
+    TaskKey[Seq[File]]("codegen") <<= Def.sequential(compile in Compile, slickCodegenTask)
   )
 
-lazy val slickCodeGenTask = (sourceManaged, dependencyClasspath in Compile, runner in Compile, streams) map { (dir, cp, r, s) =>
-  val outputDir = (dir / "slick").getPath // place generated files in sbt's managed sources folder
+lazy val slickCodegenTask = (dependencyClasspath in Compile, runner in Compile, streams) map { (cp, r, s) =>
+  val outputDir = Seq(src_generated, "slick").mkString("/")
   val pkg = "sql"
-  toError(r.run("slick.codegen.SourceCodeGenerator", cp.files, Array(slickDriver, jdbcDriver, jdbcUrl, outputDir, pkg, jdbcUsername, jdbcPassword), s.log))
+  toError(r.run("sql.CustomCodeGen", cp.files, Array(slickDriver, jdbcDriver, jdbcUrl, outputDir, pkg, jdbcUsername, jdbcPassword), s.log))
   val fname = Seq(outputDir, pkg, "Tables.scala").mkString("/")
   Seq(file(fname))
 }
-
-TaskKey[Seq[File]]("slick-codegen") <<= slickCodeGenTask
-sourceGenerators in Compile <+= slickCodeGenTask
 
 fork in run := true
